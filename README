@@ -1,0 +1,6 @@
+very alpha version.
+
+* upon start-up this program looks for two environmental varialbles, "REDIS_ADDR" and "REDIS_PORT".
+* you may need to edit the Cargo.toml file to point to the liq repository that is hosted in github
+
+api samples are written in request-test.txt, this program is planned to be hosted in https://ornot.vote/

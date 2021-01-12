@@ -202,7 +202,8 @@ pub async fn insert_vote(
     ])).await?;
     
     match res {
-        Ok(RespValue::SimpleString(x)) if x == "OK" => Ok(HttpResponse::Ok().body("updated topic")),
+        Ok(RespValue::SimpleString(x)) if x == "OK" => {
+            Ok(HttpResponse::Ok().body("updated topic"))},
         _ => Ok(HttpResponse::InternalServerError().finish())
     }
 }

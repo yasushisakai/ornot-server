@@ -2,9 +2,9 @@ mod handlers;
 mod model;
 
 use std::env;
-// use actix::prelude::*;
 use actix_redis::RedisActor;
 use actix_web::{middleware, web, App, HttpServer};
+use actix_cors::Cors;
 use dotenv;
 
 use handlers::{
@@ -21,19 +21,24 @@ use handlers::{
     calculate_topic
 };
 
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     std::env::set_var("RUST_LOG", "actix_web=trace,actix_redis=trace,ornot-server=trace");
     env_logger::init();
 
+    
     HttpServer::new(|| {
         let address = format!("{}:{}", env::var("REDIS_ADDR").unwrap(), env::var("REDIS_PORT").unwrap());
         let redis_addr = RedisActor::start(&address);
 
+        let cors = Cors::permissive();
+
         App::new()
             .data(redis_addr)
             .wrap(middleware::Logger::default())
+            .wrap(cors)
             .service(
                 web::resource("/api/v1/user")
                     .route(web::post().to(post_user)))

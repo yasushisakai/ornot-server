@@ -10,6 +10,7 @@ use dotenv;
 use handlers::{
     post_user,
     get_user,
+    get_users,
     post_topic,
     list_topics,
     get_topic,
@@ -45,6 +46,9 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/api/v1/user/{user_id}")
                     .route(web::get().to(get_user)))
+            .service(
+                web::resource("/api/v1/users")
+                    .route(web::post().to(get_users)))
             .service(
                 web::resource("/api/v1/topic")
                     .route(web::post().to(post_topic)))

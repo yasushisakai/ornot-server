@@ -13,7 +13,7 @@ impl Settable for Setting {
 #[derive(Serialize, Deserialize)]
 pub struct Topic {
     pub id: String,
-    title: String,
+    pub title: String,
     description: String,
     setting_id: Option<String>,
     setting: Setting,

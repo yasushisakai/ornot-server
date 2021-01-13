@@ -3,7 +3,7 @@ use actix::prelude::*;
 use actix_redis::{Command, RedisActor};
 use actix_web::{web, HttpResponse, Error as AWError};
 use redis_async::{resp::RespValue, resp_array};
-use futures::future::join;
+use futures::future::{join, join_all};
 use crate::model::{PartialTopic, Topic, PartialUser, User, Settable};
 
 pub async fn post_user(
@@ -48,6 +48,41 @@ pub async fn get_user(
     }
 }
 
+pub async fn get_users(
+    redis: web::Data<Addr<RedisActor>>,
+    user_ids: web::Json<Vec<String>>
+) -> Result<HttpResponse, AWError> {
+    let user_ids = user_ids.into_inner();
+
+    let commands = user_ids.iter().map(|id|{
+        let domain = format!("user:{}", id);
+        redis.send(Command(resp_array!["GET", &domain]))
+    });
+
+        let res: Vec<Result<RespValue, AWError>> =
+        join_all(commands.into_iter())
+            .await
+            .into_iter()
+            .map(|item| {
+                item.map_err(AWError::from)
+                    .and_then(|res| res.map_err(AWError::from))
+            })
+            .collect();
+
+    let mut users:Vec<User> = Vec::new();
+
+    if !res.iter().all(|res| match res {
+        Ok(RespValue::BulkString(x)) => {
+            users.push(serde_json::from_slice(x).unwrap());
+            true},
+        _ => false,
+    }) {
+        Ok(HttpResponse::InternalServerError().finish())
+    } else {
+        Ok(HttpResponse::Ok().json(users))
+    }
+}
+
 pub async fn get_topic(
     redis: web::Data<Addr<RedisActor>>,
     topic_id: web::Path<String>
@@ -80,13 +115,12 @@ pub async fn list_topics(
         "-1"
     ])).await?; // get all
 
-
     if let Ok(RespValue::Array(ids)) = res {
-        let mut list: Vec<String> = Vec::new();
+        let mut list: Vec<Vec<String>> = Vec::new();
         for id in ids {
             if let RespValue::BulkString(v) = id {
-                let topic_id = std::str::from_utf8(&v).unwrap();
-                list.push(topic_id.to_string());
+                let (topic_id, topic_title) = serde_json::from_slice(&v).unwrap();
+                list.push(vec![topic_id, topic_title]);
             }
         }
         Ok(HttpResponse::Ok().json(list))
@@ -109,10 +143,12 @@ pub async fn post_topic(
         &topic_json
     ]));
 
+    let topic_list = (&topic.id, &topic.title);
+
     let add_to_list = redis.send(Command(resp_array![
         "LPUSH",
         "topics",
-        &topic.id
+        serde_json::to_string(&topic_list).unwrap()
     ]));
 
     let (res, _) = join(set_topic, add_to_list).await;

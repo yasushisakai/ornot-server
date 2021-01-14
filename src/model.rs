@@ -10,7 +10,7 @@ impl Settable for Setting {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Topic {
     pub id: String,
     pub title: String,
@@ -34,7 +34,7 @@ impl Topic {
         self.setting.add_policy(policy);
     }
 
-    pub fn delete_plan(&mut self, text: String) {
+    pub fn remove_plan(&mut self, text: String) {
         self.setting.delete_policy(&text);
     }
 
@@ -42,20 +42,17 @@ impl Topic {
         self.setting.add_voter(&user_id);
     }
 
-    pub fn delete_user(&mut self, user_id: String) {
+    pub fn remove_user(&mut self, user_id: String) {
         self.setting.delete_voter(&user_id);
     }
 
     pub fn insert_vote(&mut self, user_id: String, vote: Vote) {
         // if I cast a vote, should I be in voters?
         // for now I should be registered as voters first...
-        
         if self.setting.voters.iter().any(|voter| voter==&user_id) {
             self.setting.votes.insert(user_id, vote);
         }
-
         // otherwise do nothing
-
     }
 
     pub fn calculate_result(&mut self) {
@@ -98,7 +95,7 @@ pub trait Settable {
 
 #[derive(Deserialize, Serialize)]
 pub struct User {
-    id: String,
+    pub id: String,
     nickname: String,
     email: String
 }

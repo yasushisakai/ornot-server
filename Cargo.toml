@@ -22,3 +22,5 @@ serde_json = "1.0.61"
 log = "0.4.11"
 # liq = {git = "https://github.com/yasushisakai/liq"}
 liq = {path = "../liq"}
+lettre = "0.10.0-alpha.4"
+tokio = {version = "0.2.*", features = ["full"] }

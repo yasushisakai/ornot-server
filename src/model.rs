@@ -1,12 +1,12 @@
-use sha2::{Sha256, Digest};
+use liq::{calculate, create_matrix, poll_result, Policy, PollResult, Setting};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use liq::{Setting, Policy, PollResult, create_matrix, calculate, poll_result};
 
 impl Settable for Setting {
     fn domain(&self) -> String {
-       let votes = serde_json::to_vec(&self.votes).unwrap(); 
-       format!("votes:{:x}", Sha256::digest(&votes))
+        let votes = serde_json::to_vec(&self.votes).unwrap();
+        format!("votes:{:x}", Sha256::digest(&votes))
     }
 }
 
@@ -17,12 +17,12 @@ pub struct Topic {
     description: String,
     setting_id: Option<String>,
     setting: Setting,
-    pub result: Option<PollResult>
+    pub result: Option<PollResult>,
 }
 
 impl Settable for Topic {
     fn domain(&self) -> String {
-        format!("topic:{}",self.id)
+        format!("topic:{}", self.id)
     }
 }
 
@@ -49,7 +49,7 @@ impl Topic {
     pub fn insert_vote(&mut self, user_id: String, vote: Vote) {
         // if I cast a vote, should I be in voters?
         // for now I should be registered as voters first...
-        if self.setting.voters.iter().any(|voter| voter==&user_id) {
+        if self.setting.voters.iter().any(|voter| voter == &user_id) {
             self.setting.votes.insert(user_id, vote);
         }
         // otherwise do nothing
@@ -74,18 +74,18 @@ pub struct PartialTopic {
 }
 
 impl From<PartialTopic> for Topic {
-    fn from (p_topic: PartialTopic) -> Self {
+    fn from(p_topic: PartialTopic) -> Self {
         let cat = format!("{}{}", p_topic.title, p_topic.description);
         let h = Sha256::digest(&cat.as_bytes());
 
-        Self{
+        Self {
             id: format!("{:x}", h),
             title: p_topic.title,
             description: p_topic.description,
             setting_id: None,
             setting: Setting::new(),
             result: None,
-        } 
+        }
     }
 }
 
@@ -94,42 +94,69 @@ pub trait Settable {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct User {
-    pub id: String,
-    nickname: String,
-    email: String
-}
-
-#[derive(Deserialize, Serialize)]
 pub struct PartialUser {
-    nickname: String,
-    email: String,
+    pub nickname: String,
+    pub email: String,
 }
 
 impl From<PartialUser> for User {
-    fn from(p_user:PartialUser) -> User {
+    fn from(p_user: PartialUser) -> User {
         User::new(p_user.nickname, p_user.email)
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct User {
+    pub id: String,
+    pub nickname: String,
+    // email: String,
+    temp_code: Option<String>,
+    access_token: Option<String>,
+    is_verified: bool,
+}
+
 impl User {
-    fn new(nickname: String, email: String) -> Self {
+    pub fn new(nickname: String, email: String) -> Self {
         let cat = format!("{}{}", &nickname, &email);
         let h = Sha256::digest(&cat.as_bytes());
         let id = format!("{:x}", h);
 
         Self {
-            id, nickname, email
+            id,
+            nickname,
+            // email,
+            temp_code: None,
+            access_token: None,
+            is_verified: false,
         }
     }
 
-    // for debugging reasons, this function should go away once everything is working
-    fn new_with_id(nickname: String, email: String, id: String) -> Self {
-        Self{
-            id,
-            nickname,
-            email
+    pub fn set_temp_code(&mut self, code: &str) {
+        self.temp_code = Some(code.to_string());
+    }
+
+    pub fn get_temp_code(&self) -> Option<&String>{
+        self.temp_code.as_ref()
+    }
+
+    pub fn get_access_token(&self) -> Option<&String>{
+        self.access_token.as_ref()
+    }
+
+    pub fn match_temp_code(&self, code: &str) -> bool {
+        match &self.temp_code {
+            Some(x) => x == code,
+            None => false,
         }
+    }
+
+    pub fn set_access_token(&mut self, token: String) {
+        self.access_token = Some(token);
+        self.is_verified = true;
+    }
+
+    pub fn json(&self) -> String {
+        serde_json::to_string(self).expect("user should be able to serialize")
     }
 }
 
@@ -138,4 +165,3 @@ impl Settable for User {
         format!("user:{}", self.id)
     }
 }
-

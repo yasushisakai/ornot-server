@@ -103,17 +103,33 @@ pub async fn sign_up(
 
     let temp_code = generate_temp_code(&p_user);
     let email = &p_user.email.to_owned();
+    let temp_code_domain = format!("temp_code:{}",&temp_code);
 
     let user: User = p_user.into();
-    let temp_code_domain = format!("temp_code:{}",&temp_code);
+
+    // we need to delete the previous temp code if this email was already
+    // registered, this endpoint effectively works as 'change nickname'
+    let get_current_user = redis.send(Command(resp_array!["GET", &user.domain()])).await?;
+
+    if let Ok(RespValue::BulkString(x)) = get_current_user {
+        let prev_user:User = serde_json::from_slice(&x).unwrap();
+        let prev_partial_user = PartialUser{ 
+            nickname: prev_user.nickname,
+            email:email.to_string()
+        };
+        let prev_temp_code = generate_temp_code(&prev_partial_user);
+        let prev_temp_code_domain = format!("temp_code:{}", &prev_temp_code);
+        let _del_prev = redis.send(Command(resp_array!["DEL", &prev_temp_code_domain])).await?;
+    }
      
     let email = compose_temp_code_mail(&user, &email, &temp_code);
     let send = async_send_mail(email);
     let temp = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id]));
+    let expire = redis.send(Command(resp_array!["EXPIRE", &temp_code_domain, "1800"]));
     let set = redis.send(Command(resp_array!["SET", &user.domain(), &user.json()]));
     let append = redis.send(Command(resp_array!["SADD", "users", &user.id]));
 
-    let redis = join_all(vec![set, append, temp]);
+    let redis = join_all(vec![set, append, temp, expire]);
 
     let (res, _) = join(redis, send).await;
 

@@ -118,7 +118,7 @@ pub struct User {
 
 impl User {
     pub fn new(nickname: String, email: String) -> Self {
-        let cat = format!("{}{}", &nickname, &email);
+        let cat = format!("email:{}", &email);
         let id = encode(Sha256::digest(&cat.as_bytes())).into_string();
 
         Self {

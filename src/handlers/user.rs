@@ -160,7 +160,7 @@ pub async fn verify_temp_code(
         let (set, _set_token) = join(set, set_token).await;
 
         match set? {
-            Ok(RespValue::SimpleString(x)) if x == "OK" => Ok(HttpResponse::Ok().json(access_token)),
+            Ok(RespValue::SimpleString(x)) if x == "OK" => Ok(HttpResponse::Ok().body(access_token)),
             _=> Ok(HttpResponse::InternalServerError().body("unable to set access token"))
         }
     } else {

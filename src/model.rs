@@ -1,12 +1,13 @@
 use liq::{calculate, create_matrix, poll_result, Policy, PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use bs58::encode;
 use std::collections::HashMap;
 
 impl Settable for Setting {
     fn domain(&self) -> String {
         let votes = serde_json::to_vec(&self.votes).unwrap();
-        format!("votes:{:x}", Sha256::digest(&votes))
+        encode(format!("votes:{:x}", Sha256::digest(&votes))).into_string()
     }
 }
 
@@ -76,10 +77,10 @@ pub struct PartialTopic {
 impl From<PartialTopic> for Topic {
     fn from(p_topic: PartialTopic) -> Self {
         let cat = format!("{}{}", p_topic.title, p_topic.description);
-        let h = Sha256::digest(&cat.as_bytes());
+        let id = encode(Sha256::digest(&cat.as_bytes())).into_string();
 
         Self {
-            id: format!("{:x}", h),
+            id,
             title: p_topic.title,
             description: p_topic.description,
             setting_id: None,
@@ -110,50 +111,26 @@ pub struct User {
     pub id: String,
     pub nickname: String,
     // email: String,
-    temp_code: Option<String>,
-    access_token: Option<String>,
-    is_verified: bool,
+    // temp_code: Option<String>,
+    // access_token: Option<String>,
+    pub is_verified: bool,
 }
 
 impl User {
     pub fn new(nickname: String, email: String) -> Self {
         let cat = format!("{}{}", &nickname, &email);
-        let h = Sha256::digest(&cat.as_bytes());
-        let id = format!("{:x}", h);
+        let id = encode(Sha256::digest(&cat.as_bytes())).into_string();
 
         Self {
             id,
             nickname,
             // email,
-            temp_code: None,
-            access_token: None,
+            // temp_code: None,
+            // access_token: None,
             is_verified: false,
         }
     }
 
-    pub fn set_temp_code(&mut self, code: &str) {
-        self.temp_code = Some(code.to_string());
-    }
-
-    pub fn get_temp_code(&self) -> Option<&String>{
-        self.temp_code.as_ref()
-    }
-
-    pub fn get_access_token(&self) -> Option<&String>{
-        self.access_token.as_ref()
-    }
-
-    pub fn match_temp_code(&self, code: &str) -> bool {
-        match &self.temp_code {
-            Some(x) => x == code,
-            None => false,
-        }
-    }
-
-    pub fn set_access_token(&mut self, token: String) {
-        self.access_token = Some(token);
-        self.is_verified = true;
-    }
 
     pub fn json(&self) -> String {
         serde_json::to_string(self).expect("user should be able to serialize")

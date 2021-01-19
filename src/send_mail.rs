@@ -1,7 +1,5 @@
-use actix_redis::Error as ARError;
 use dotenv::dotenv;
 use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport};
-use redis_async::resp::RespValue;
 use tokio::task;
 
 pub struct Email {

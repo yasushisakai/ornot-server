@@ -1,42 +1,33 @@
-// 1. first an unregistered user tries to sign-up
-//      this should be a POST request -> sign-up
-//
-// 2. the server sends an email to the user with a temp-code
-//
-// 3. User uses that link to authenticate
-//      this should be a GET request -> temp
-//
-// 4. server will verify that temp-code and if true, issues an access-token
-//
-// 5. User client saves that in localStorage
-//      authentification BEARER header?
-
 use crate::model::{PartialUser, User};
 use crate::send_mail::Email;
 use actix::Addr;
 use actix_redis::{Command, RedisActor, RespValue};
+use futures::future::join;
 use redis_async::resp_array;
 use actix_web::{web, http, Error};
 use sha2::{Digest, Sha256};
+use bs58::encode;
+use dotenv::dotenv;
 
 pub fn generate_temp_code(p_user: &PartialUser) -> String {
-    let salt = "temp_code"; //fixme: salt value is exposed
+    dotenv().ok();
+    let salt = std::env::var("SALT_TEMP_CODE").expect("env var 'SALT_TEMP_CODE missing'"); //fixme: salt value is exposed
     let salted = format!("{}{}{}", salt, p_user.nickname, p_user.email);
-    format!("{:x}", Sha256::digest(salted.as_bytes()))
+    encode(format!("{:x}", Sha256::digest(salted.as_bytes()))).into_string()
 }
 
 pub fn generate_access_token(user: &User) -> String {
-    let salt = "access_token"; //fixme: salt value is exposed
-    let user_code = user.get_temp_code().expect("user should have a temp code by now");
-    let salted = format!("{}{}", salt, user_code);
-    format!("{:x}", Sha256::digest(salted.as_bytes()))
+    dotenv().ok();
+    let salt = std::env::var("SALT_ACCESS_TOKEN").expect("evn var 'SALT_ACCESS_TOKEN missing'");
+    let salted = format!("{}{}", salt, user.id);
+    encode(format!("{:x}", Sha256::digest(salted.as_bytes()))).into_string()
 }
 
 pub fn compose_temp_code_mail(user: &User, email: &str, code: &str) -> Email {
     let body = format!(
         "Hi {}, this is a tiny note to let you know your temp code. \n
 use the below url to verify that you own this email address. \n
-https://ornot.vote/auth/{}/{}\n
+https://ornot.vote/auth/?i={}&c={}\n
 bye and have a nice day :)
 ",
         user.nickname, user.id, code,
@@ -61,12 +52,7 @@ pub async fn check_auth(
     let get = redis.send(Command(resp_array![
     "GET", 
     &domain
-    ])).await;
-
-    let user: User = match get {
-        Ok(Ok(RespValue::BulkString(x))) => serde_json::from_slice(&x).expect("data shoud be deserializable"),
-        _=> {return Ok(false)}
-    };
+    ]));
 
     let header = match header.get("Authorization") {
         Some(h) => h.to_str(),
@@ -74,9 +60,26 @@ pub async fn check_auth(
     };
 
     let bearer = header.unwrap().to_string();
-    let token: Option<&str> = bearer.split_whitespace().nth(1);
-    let access_token: Option<&str> = user.get_access_token().map(|t|t.as_str());
+    let token: &str = match bearer.split_whitespace().nth(1) {
+        Some(t) => t,
+        None => {return Ok(false)}
+    }; 
+
+    let token_domain = format!("access_token:{}", &token);
+    let get_token = redis.send(Command(resp_array!["GET", &token_domain]));
+
+    let (user, uid) = join(get, get_token).await;
+
+    let user: User = match user? {
+        Ok(RespValue::BulkString(x)) => serde_json::from_slice(&x).expect("data shoud be deserializable"),
+        _=> {return Ok(false)}
+    };
+
+    let uid: String = match uid? {
+        Ok(RespValue::BulkString(x)) => String::from_utf8(x).unwrap(),
+        _=> return Ok(false)
+    };
     
-    Ok(token == access_token)
+    Ok(user.id == uid)
 }
 

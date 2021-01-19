@@ -24,3 +24,4 @@ log = "0.4.11"
 liq = {path = "../liq"}
 lettre = "0.10.0-alpha.4"
 tokio = {version = "0.2.*", features = ["full"] }
+bs58 = "0.4.0"

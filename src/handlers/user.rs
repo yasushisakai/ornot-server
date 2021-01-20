@@ -76,21 +76,27 @@ pub async fn get(
     }
 }
 
-// FIXME: this should go away, once the auth is working seaminglessly
-pub async fn put(
+pub async fn force_add(
     redis: web::Data<Addr<RedisActor>>,
     user: web::Json<PartialUser>,
 ) -> Result<HttpResponse, AWError> {
-    let user: User = user.into_inner().into();
+    let temp_code = generate_temp_code(&user);
+    let temp_code_domain = format!("temp_code:{}",&temp_code);
+    let mut user: User = user.into_inner().into();
+    user.is_verified = true;
+    let access_token = generate_access_token(&user);
+    let access_token_domain = format!("access_token:{}", &access_token);
 
     let set = redis.send(Command(resp_array!["SET", &user.domain(), &user.json()]));
-
     let append = redis.send(Command(resp_array!["SADD", "users", &user.id]));
+    let set_at = redis.send(Command(resp_array!["SET", &access_token_domain, &user.id]));
+    let set_tc = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id]));
 
-    let (res, _) = join(set, append).await;
+    let group = join_all(vec![set, append, set_tc, set_at]).await;
 
-    match res? {
-        Ok(RespValue::SimpleString(x)) if x == "OK" => Ok(HttpResponse::Ok().json(&user)),
+    match group.iter().nth(0) {
+        Some(Ok(Ok(RespValue::SimpleString(x)))) if x == "OK" =>
+            Ok(HttpResponse::Ok().json((&user, access_token))),
         _ => Ok(HttpResponse::InternalServerError().finish()),
     }
 }

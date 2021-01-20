@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use actix::prelude::*;
 use actix_redis::{Command, RedisActor};
 use actix_web::{web, HttpResponse, Error as AWError};
@@ -50,7 +50,7 @@ pub async fn delete(
         }
     };
 
-    let list_element = serde_json::to_string(&vec![topic_id, topic.title]).unwrap();
+    let list_element = serde_json::to_string(&topic.list_item()).unwrap();
 
     let single_del = redis.send(Command(resp_array![
         "DEL",
@@ -111,12 +111,10 @@ pub async fn put(
         &topic_json
     ]));
 
-    let topic_list = (&topic.id, &topic.title);
-
     let add_to_list = redis.send(Command(resp_array![
         "SADD",
         "topics",
-        serde_json::to_string(&topic_list).unwrap()
+        serde_json::to_string(&topic.list_item()).unwrap()
     ]));
 
     let (res, _) = join(set_topic, add_to_list).await;
@@ -157,60 +155,58 @@ pub async fn add_plan(
     // add the plan
     topic.add_plan(text); 
 
-    let new_topic_json = serde_json::to_string(&topic).unwrap();
-    
     // save the new topic data
     let res = redis.send(Command(resp_array![
         "SET",
         &domain,
-        &new_topic_json
+        &topic.json()
     ])).await?;
 
     // respond
     match res {
         Ok(RespValue::SimpleString(x)) if x == "OK" => 
-            Ok(HttpResponse::Ok().json(new_topic_json)),
+            Ok(HttpResponse::Ok().json(topic)),
         _ => Ok(HttpResponse::InternalServerError().finish())
     }
 }    
 
-type Vote = HashMap<String, f64>;
+type Vote = BTreeMap<String, f64>;
 
-pub async fn update_vote(
-    redis: web::Data<Addr<RedisActor>>,
-    path: web::Path<(String, String)>,
-    vote: web::Json<Vote>
-    )-> Result<HttpResponse, AWError>
-{
-    let (topic_id, user_id) = path.into_inner(); 
-    let domain = format!("topic:{}", &topic_id);
-    
-    let res = redis.send(Command(resp_array![
-        "GET",
-        &domain
-    ])).await?;
-
-    let mut topic: Topic = match res {
-        Ok(RespValue::BulkString(data)) => serde_json::from_slice(&data).unwrap(),
-        _ => {return Ok(HttpResponse::InternalServerError().finish());}
-    };
-
-    let vote = vote.into_inner();
-
-    topic.insert_vote(user_id, vote);
-
-    let res = redis.send(Command(resp_array![
-        "SET",
-        &domain,
-        serde_json::to_string(&topic).unwrap()
-    ])).await?;
-    
-    match res {
-        Ok(RespValue::SimpleString(x)) if x == "OK" => {
-            Ok(HttpResponse::Ok().body("updated topic"))},
-        _ => Ok(HttpResponse::InternalServerError().finish())
-    }
-}
+// pub async fn update_vote(
+//     redis: web::Data<Addr<RedisActor>>,
+//     path: web::Path<(String, String)>,
+//     vote: web::Json<Vote>
+//     )-> Result<HttpResponse, AWError>
+// {
+//     let (topic_id, user_id) = path.into_inner(); 
+//     let domain = format!("topic:{}", &topic_id);
+//     
+//     let res = redis.send(Command(resp_array![
+//         "GET",
+//         &domain
+//     ])).await?;
+// 
+//     let mut topic: Topic = match res {
+//         Ok(RespValue::BulkString(data)) => serde_json::from_slice(&data).unwrap(),
+//         _ => {return Ok(HttpResponse::InternalServerError().finish());}
+//     };
+// 
+//     let vote = vote.into_inner();
+// 
+//     let new_setting_hash = topic.insert_vote(&user_id, vote);
+// 
+//     let res = redis.send(Command(resp_array![
+//         "SET",
+//         &domain,
+//         serde_json::to_string(&topic).unwrap()
+//     ])).await?;
+//     
+//     match res {
+//         Ok(RespValue::SimpleString(x)) if x == "OK" => {
+//             Ok(HttpResponse::Ok().body("updated topic"))},
+//         _ => Ok(HttpResponse::InternalServerError().finish())
+//     }
+// }
 
 pub async fn update_vote_and_calculate(
     redis: web::Data<Addr<RedisActor>>,
@@ -237,22 +233,38 @@ pub async fn update_vote_and_calculate(
 
     let vote = vote.into_inner();
 
-    topic.insert_vote(user_id, vote);
-    topic.calculate_result();
+    let new_hash = topic.insert_vote(&user_id, vote);
+    // let's just compute it each time for now.
+    
+    if new_hash != topic.setting_hash {
+        topic.update_setting_hash(&new_hash);
+        topic.calculate();
+        let set_topic = redis.send(Command(resp_array![
+            "SET",
+            &topic.domain(),
+            &topic.json()
+        ])); 
 
-    let res = redis.send(Command(resp_array![
-        "SET",
-        &domain,
-        serde_json::to_string(&topic).unwrap()
-    ])).await?;
+        let setting_domain = format!("setting:{}", topic.setting_hash);
+        let set_setting = redis.send(Command(resp_array![
+            "SET",
+            setting_domain, 
+            topic.setting_json()
+        ]));
 
-    match res {
-        Ok(RespValue::SimpleString(x)) if x == "OK" => {
-            Ok(HttpResponse::Ok().json(topic))
-        },
-        _ => Ok(HttpResponse::InternalServerError().finish())
+        let (res, _) = join(set_topic, set_setting).await;
+        
+        match res? {
+            Ok(RespValue::SimpleString(x)) if x == "OK" => {
+                Ok(HttpResponse::Ok().json(topic))
+            },
+            _ => {
+                Ok(HttpResponse::InternalServerError().body("cannot save new topic"))
+            }
+        }
+    } else { // no change
+       Ok(HttpResponse::Ok().json("no change"))
     }
-
 }
 
 pub async fn remove_plan(
@@ -342,7 +354,6 @@ pub async fn add_user(
     }
 }
 
-
 pub async fn remove_user(
     redis: web::Data<Addr<RedisActor>>,
     path: web::Path<(String, String)>
@@ -385,43 +396,4 @@ pub async fn remove_user(
         _ => Ok(HttpResponse::InternalServerError().finish())
     }
 }
-
-
-pub async fn calculate(
-    redis: web::Data<Addr<RedisActor>>,
-    path: web::Path<String>,
-    ) -> Result<HttpResponse, AWError> {
-
-    let topic_id = path.into_inner();
-    let domain = format!("topic:{}", &topic_id);
-
-    let res = redis.send(Command(resp_array![
-        "GET",
-        &domain
-    ])).await?;
-
-    let mut topic:Topic = match res {
-        Ok(RespValue::BulkString(data)) => serde_json::from_slice(&data).unwrap(),
-        _ => {return Ok(HttpResponse::InternalServerError().finish());}
-    };
-
-    topic.calculate_result();
-
-    let res = redis.send(Command(resp_array![
-        "SET",
-        &domain,
-        serde_json::to_string(&topic).unwrap()
-    ])).await?;
-
-    match res {
-        Ok(RespValue::SimpleString(x)) if x == "OK" => {},
-        _ => {return Ok(HttpResponse::InternalServerError().finish());}
-    }
-
-    match topic.result {
-        Some(result) => Ok(HttpResponse::Ok().json(result)),
-        None => Ok(HttpResponse::InternalServerError().finish())
-    }
-}
-
 

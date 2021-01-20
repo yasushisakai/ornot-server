@@ -1380,10 +1380,12 @@ checksum = "8dd5a6d5999d9907cda8ed67bbd137d3af8085216c2ac62de5be860bd41f304a"
 name = "liq"
 version = "0.1.0"
 dependencies = [
+ "bs58",
  "clap",
  "ndarray",
  "serde",
  "serde_json",
+ "sha2",
  "term",
  "termion",
 ]

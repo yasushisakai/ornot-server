@@ -40,9 +40,10 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/api/v1/users").route(web::post().to(user::from_ids)), // .route(web::get().to(list_users))
             )
-            .service(web::resource("/api/v1/user").route(web::put().to(user::put)))
             .service(web::resource("/api/v1/user/signup")
                 .route(web::post().to(user::sign_up)))
+            .service(web::resource("/api/v1/user/force_add")
+                .route(web::post().to(user::force_add)))
             .service(web::resource("/api/v1/user/{user_id}/code/{temp_code}")
                 .route(web::get().to(user::verify_temp_code)))
             .service(web::resource("/api/v1/user/{user_id}/check")
@@ -67,17 +68,12 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::resource("api/v1/topic/{topic_id}/vote/{user_id}")
-                    .route(web::patch().to(topic::update_vote))
                     .route(web::put().to(topic::update_vote_and_calculate)),
             )
             .service(
                 web::resource("api/v1/topic/{topic_id}/user/{user_id}")
                     .route(web::post().to(topic::add_user))
                     .route(web::delete().to(topic::remove_user)),
-            )
-            .service(
-                web::resource("api/v1/topic/{topic_id}/calculate")
-                    .route(web::post().to(topic::calculate)),
             )
             // helper
             .service(web::resource("api/v1/nuclear").route(web::delete().to(nuclear)))

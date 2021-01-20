@@ -1,24 +1,29 @@
-use liq::{calculate, create_matrix, poll_result, Policy, PollResult, Setting};
+use liq::{
+    Plan, 
+    PollResult, 
+    Setting
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use bs58::encode;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 impl Settable for Setting {
     fn domain(&self) -> String {
-        let votes = serde_json::to_vec(&self.votes).unwrap();
-        encode(format!("votes:{:x}", Sha256::digest(&votes))).into_string()
+        let based_hash = self.based_hash();
+        format!("setting:{}", based_hash)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Topic {
-    pub id: String,
-    pub title: String,
+    id: String,
+    title: String,
     description: String,
-    setting_id: Option<String>,
+    pub setting_hash: String,
+    setting_prev_hash: String,
     setting: Setting,
-    pub result: Option<PollResult>,
+    result: Option<PollResult>
 }
 
 impl Settable for Topic {
@@ -27,16 +32,24 @@ impl Settable for Topic {
     }
 }
 
-type Vote = HashMap<String, f64>;
+type Vote = BTreeMap<String, f64>;
 
 impl Topic {
+
+    pub fn list_item(&self) -> (String, String) {
+        (self.id.to_owned(), self.title.to_owned())
+    }
+
+    pub fn json(&self) -> String {
+        serde_json::to_string(self).expect("should be able to Serialize")
+    }
+
     pub fn add_plan(&mut self, text: String) {
-        let policy = Policy::Short(text);
-        self.setting.add_policy(policy);
+        self.setting.add_plan(Plan::new(text));
     }
 
     pub fn remove_plan(&mut self, text: String) {
-        self.setting.delete_policy(&text);
+        self.setting.delete_plan(&text);
     }
 
     pub fn add_user(&mut self, user_id: String) {
@@ -47,24 +60,33 @@ impl Topic {
         self.setting.delete_voter(&user_id);
     }
 
-    pub fn insert_vote(&mut self, user_id: String, vote: Vote) {
-        // if I cast a vote, should I be in voters?
-        // for now I should be registered as voters first...
-        if self.setting.voters.iter().any(|voter| voter == &user_id) {
-            self.setting.votes.insert(user_id, vote);
-        }
-        // otherwise do nothing
+    pub fn setting_json(&self) -> Vec<u8> {
+        serde_json::to_vec(&self.setting).expect("Topic's Setting should be able to be Serialized")
     }
 
-    pub fn calculate_result(&mut self) {
-        let domain = self.setting.domain();
-        if self.setting_id == None || self.setting_id != Some(domain) {
-            let m = create_matrix(&self.setting);
-            let r = calculate(m, self.setting.voters.len());
-            let result = poll_result(&self.setting.voters, &self.setting.policies, r);
-            self.result = Some(result);
-            self.setting_id = Some(self.setting.domain());
-        }
+    pub fn insert_vote(&mut self, user_id: &str, vote: BTreeMap<String, f64>)
+        -> String 
+    {
+        // more like swapping the HashMap
+        self.setting.overwrite_vote(user_id, vote);
+        self.setting.based_hash()
+    }
+
+    pub fn update_setting_hash(&mut self, new_hash: &str) {
+        self.setting_prev_hash = self.setting_hash.to_owned();
+        self.setting_hash = new_hash.to_string();
+    }
+
+    pub fn calculate(&mut self) {
+        let result = self.setting.calculate();
+        self.result = Some(result);
+    }
+
+    pub fn result_domain(&self) -> String {
+    
+        let result: &PollResult = self.result.as_ref().expect("we should have a valid result id");
+
+        format!("result:{}", result.based_hash())
     }
 }
 
@@ -83,8 +105,9 @@ impl From<PartialTopic> for Topic {
             id,
             title: p_topic.title,
             description: p_topic.description,
-            setting_id: None,
+            setting_hash: "0".to_string(),
             setting: Setting::new(),
+            setting_prev_hash: "0".to_string(),
             result: None,
         }
     }
@@ -110,9 +133,6 @@ impl From<PartialUser> for User {
 pub struct User {
     pub id: String,
     pub nickname: String,
-    // email: String,
-    // temp_code: Option<String>,
-    // access_token: Option<String>,
     pub is_verified: bool,
 }
 
@@ -130,7 +150,6 @@ impl User {
             is_verified: false,
         }
     }
-
 
     pub fn json(&self) -> String {
         serde_json::to_string(self).expect("user should be able to serialize")

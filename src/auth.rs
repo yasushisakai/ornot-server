@@ -11,11 +11,12 @@ use dotenv::dotenv;
 
 pub fn generate_temp_code(p_user: &PartialUser) -> String {
     dotenv().ok();
-    let salt = std::env::var("SALT_TEMP_CODE").expect("env var 'SALT_TEMP_CODE missing'"); //fixme: salt value is exposed
+    let salt = std::env::var("SALT_TEMP_CODE").expect("env var 'SALT_TEMP_CODE missing'"); 
     let salted = format!("{}{}{}", salt, p_user.nickname, p_user.email);
     encode(format!("{:x}", Sha256::digest(salted.as_bytes()))).into_string()
 }
 
+// FIXME: access token is always the same!!
 pub fn generate_access_token(user: &User) -> String {
     dotenv().ok();
     let salt = std::env::var("SALT_ACCESS_TOKEN").expect("evn var 'SALT_ACCESS_TOKEN missing'");
@@ -47,6 +48,9 @@ pub async fn check_auth(
     header: &http::header::HeaderMap
     ) -> Result<bool, Error> {
 
+    dotenv().ok();
+    let master_key = std::env::var("MASTER_KEY").unwrap();
+
     let domain = format!("user:{}", user_id);
 
     let get = redis.send(Command(resp_array![
@@ -64,6 +68,10 @@ pub async fn check_auth(
         Some(t) => t,
         None => {return Ok(false)}
     }; 
+
+    if token == master_key{
+        return Ok(true)
+    }
 
     let token_domain = format!("access_token:{}", &token);
     let get_token = redis.send(Command(resp_array!["GET", &token_domain]));

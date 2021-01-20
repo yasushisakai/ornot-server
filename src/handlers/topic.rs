@@ -172,42 +172,6 @@ pub async fn add_plan(
 
 type Vote = BTreeMap<String, f64>;
 
-// pub async fn update_vote(
-//     redis: web::Data<Addr<RedisActor>>,
-//     path: web::Path<(String, String)>,
-//     vote: web::Json<Vote>
-//     )-> Result<HttpResponse, AWError>
-// {
-//     let (topic_id, user_id) = path.into_inner(); 
-//     let domain = format!("topic:{}", &topic_id);
-//     
-//     let res = redis.send(Command(resp_array![
-//         "GET",
-//         &domain
-//     ])).await?;
-// 
-//     let mut topic: Topic = match res {
-//         Ok(RespValue::BulkString(data)) => serde_json::from_slice(&data).unwrap(),
-//         _ => {return Ok(HttpResponse::InternalServerError().finish());}
-//     };
-// 
-//     let vote = vote.into_inner();
-// 
-//     let new_setting_hash = topic.insert_vote(&user_id, vote);
-// 
-//     let res = redis.send(Command(resp_array![
-//         "SET",
-//         &domain,
-//         serde_json::to_string(&topic).unwrap()
-//     ])).await?;
-//     
-//     match res {
-//         Ok(RespValue::SimpleString(x)) if x == "OK" => {
-//             Ok(HttpResponse::Ok().body("updated topic"))},
-//         _ => Ok(HttpResponse::InternalServerError().finish())
-//     }
-// }
-
 pub async fn update_vote_and_calculate(
     redis: web::Data<Addr<RedisActor>>,
     path: web::Path<(String, String)>,

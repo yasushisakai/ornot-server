@@ -75,6 +75,12 @@ async fn main() -> std::io::Result<()> {
                     .route(web::post().to(topic::add_user))
                     .route(web::delete().to(topic::remove_user)),
             )
+            // setting and calculate
+            .service(web::resource("api/v1/setting/{setting_id}")
+                .route(web::get().to(get_setting)))
+            .service(web::resource("api/v1/calculate_raw")
+                .route(web::post().to(calculate_setting)))
+
             // helper
             .service(web::resource("api/v1/nuclear").route(web::delete().to(nuclear)))
     })

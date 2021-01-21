@@ -1,11 +1,7 @@
-use liq::{
-    Plan, 
-    PollResult, 
-    Setting
-};
+use bs58::encode;
+use liq::{Plan, PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use bs58::encode;
 use std::collections::BTreeMap;
 
 impl Settable for Setting {
@@ -23,7 +19,7 @@ pub struct Topic {
     pub setting_hash: String,
     setting_prev_hash: String,
     setting: Setting,
-    result: Option<PollResult>
+    result: Option<PollResult>,
 }
 
 impl Settable for Topic {
@@ -35,7 +31,6 @@ impl Settable for Topic {
 type Vote = BTreeMap<String, f64>;
 
 impl Topic {
-
     pub fn list_item(&self) -> (String, String) {
         (self.id.to_owned(), self.title.to_owned())
     }
@@ -64,9 +59,7 @@ impl Topic {
         serde_json::to_vec(&self.setting).expect("Topic's Setting should be able to be Serialized")
     }
 
-    pub fn insert_vote(&mut self, user_id: &str, vote: BTreeMap<String, f64>)
-        -> String 
-    {
+    pub fn insert_vote(&mut self, user_id: &str, vote: BTreeMap<String, f64>) -> String {
         // more like swapping the HashMap
         self.setting.overwrite_vote(user_id, vote);
         self.setting.based_hash()
@@ -83,8 +76,10 @@ impl Topic {
     }
 
     pub fn result_domain(&self) -> String {
-    
-        let result: &PollResult = self.result.as_ref().expect("we should have a valid result id");
+        let result: &PollResult = self
+            .result
+            .as_ref()
+            .expect("we should have a valid result id");
 
         format!("result:{}", result.based_hash())
     }

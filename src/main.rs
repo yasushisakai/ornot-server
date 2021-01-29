@@ -83,6 +83,7 @@ async fn main() -> std::io::Result<()> {
 
             // helper
             .service(web::resource("api/v1/nuclear").route(web::delete().to(nuclear)))
+            .service(web::resource("api/v1/dump").route(web::get().to(dump)))
     })
     .bind("0.0.0.0:8080")?
     .run()

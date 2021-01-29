@@ -2,7 +2,11 @@ use bs58::encode;
 use liq::{Plan, PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+// use actix_web::{web, Error as AWError};
+// use actix::Addr;
+// use actix_redis::{Command, RedisActor};
+// use redis_async::{resp_array, resp::RespValue};
 
 impl Settable for Setting {
     fn domain(&self) -> String {
@@ -28,8 +32,6 @@ impl Settable for Topic {
     }
 }
 
-type Vote = BTreeMap<String, f64>;
-
 impl Topic {
     pub fn list_item(&self) -> (String, String) {
         (self.id.to_owned(), self.title.to_owned())
@@ -45,6 +47,10 @@ impl Topic {
 
     pub fn remove_plan(&mut self, text: String) {
         self.setting.delete_plan(&text);
+    }
+    
+    pub fn get_users(&self) -> HashSet<String> {
+        self.setting.get_voters()
     }
 
     pub fn add_user(&mut self, user_id: String) {

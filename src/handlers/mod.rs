@@ -3,7 +3,7 @@ pub mod user;
 
 use crate::{
     model::{Topic, User},
-    redis_helper::redis_add,
+    redis_helper::{redis_add, redis_get_list, redis_get_slices},
 };
 use actix::Addr;
 use actix_redis::{Command, RedisActor};
@@ -47,70 +47,39 @@ pub async fn calculate_setting(setting: web::Json<Setting>) -> Result<HttpRespon
 pub async fn dump(redis: web::Data<Addr<RedisActor>>) -> Result<HttpResponse, AWError> {
     // get all tables
 
-    let res = redis
-        .send(Command(resp_array!["SMEMBERS", "topics"]))
-        .await?;
+    let topics_cmd = redis_get_list("topic", &redis);
+    let users_cmd = redis_get_list("user", &redis);
 
-    let topic_ids: Vec<String> = match res {
-        Ok(RespValue::Array(ids)) => {
-            let mut temp: Vec<String> = Vec::new();
-            for id in ids {
-                if let RespValue::BulkString(v) = id {
-                    let (topic_id, _): (String, String) =
-                        serde_json::from_slice(&v).expect("list item should be Deserializeable");
-                    temp.push(topic_id);
-                }
-            }
-            temp
-        }
-        _ => Vec::new(),
-    };
-    // get each topics
-    let res: Vec<Result<RespValue, AWError>> = join_all(topic_ids.iter().map(|id| {
-        let domain = format!("topic:{}", &id);
-        redis.send(Command(resp_array!["get", &domain,]))
-    }))
-    .await
-    .into_iter()
-    .map(|item| {
-        item.map_err(AWError::from)
-            .and_then(|res| res.map_err(AWError::from))
-    })
-    .collect();
+    let (topic_list_items, user_list_items) = join(topics_cmd, users_cmd).await;
 
-    let mut topics: Vec<Topic> = Vec::new();
-    let mut user_ids: HashSet<String> = HashSet::new();
+    let topic_ids: Vec<String> = match topic_list_items{
+        Some(x) => x.iter().map(|li| li.0.to_string()).collect(),
+        None => {
+            return Ok(HttpResponse::InternalServerError().body("failed to get topic_ids"))
+    }};
+        
+    let user_ids: Vec<String> = match user_list_items{
+        Some(x) => x.iter().map(|li| li.0.to_string()).collect(),
+        None => {
+            return Ok(HttpResponse::InternalServerError().body("failed to get user_ids"))
+    }};
 
-    for r in res {
-        if let Ok(RespValue::BulkString(x)) = r {
-            let t: Topic = serde_json::from_slice(&x).expect("should be deserializable");
-            // get all unique user ids
-            user_ids = user_ids.union(&t.get_users()).map(String::from).collect();
-            topics.push(t);
-        }
-    }
+    let topics_cmd = redis_get_slices(&topic_ids, "topic", &redis);
+    let users_cmd = redis_get_slices(&user_ids, "user", &redis);
 
-    // get each user from user id
-    let mut users: Vec<User> = Vec::new();
-    let res: Vec<Result<RespValue, AWError>> = join_all(user_ids.iter().map(|id| {
-        let domain = format!("user:{}", &id);
-        redis.send(Command(resp_array!["get", &domain,]))
-    }))
-    .await
-    .into_iter()
-    .map(|item| {
-        item.map_err(AWError::from)
-            .and_then(|res| res.map_err(AWError::from))
-    })
-    .collect();
+    let (topic_slices, user_slices) = join(topics_cmd, users_cmd).await;
 
-    for r in res {
-        if let Ok(RespValue::BulkString(x)) = r {
-            let user: User =
-                serde_json::from_slice(&x).expect("user json data should be DeSeriliazable");
-            users.push(user);
-        }
-    }
+    let topics: Vec<Topic> = topic_slices
+        .iter()
+        .map(|t| serde_json::from_slice(t)
+            .expect("this slice should be Deserialized to Topic"))
+        .collect();
+
+    let users: Vec<User> = user_slices
+        .iter()
+        .map(|u| serde_json::from_slice(u)
+            .expect("this slice should be Deserialized to User"))
+        .collect();
 
     Ok(HttpResponse::Ok().json((users, topics)))
 }

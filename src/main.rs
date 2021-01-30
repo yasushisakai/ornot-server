@@ -2,6 +2,7 @@ mod auth;
 mod handlers;
 mod model;
 mod send_mail;
+mod redis_helper;
 
 use actix_cors::Cors;
 use actix_redis::RedisActor;
@@ -84,6 +85,7 @@ async fn main() -> std::io::Result<()> {
             // helper
             .service(web::resource("api/v1/nuclear").route(web::delete().to(nuclear)))
             .service(web::resource("api/v1/dump").route(web::get().to(dump)))
+            .service(web::resource("api/v1/restore").route(web::put().to(restore)))
     })
     .bind("0.0.0.0:8080")?
     .run()

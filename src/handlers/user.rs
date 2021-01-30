@@ -3,6 +3,7 @@ use crate::send_mail::async_send_mail;
 use crate::{
     auth::compose_temp_code_mail,
     model::{PartialUser, Settable, User},
+    redis_helper::{redis_add, redis_get_slice, redis_delete}
 };
 use actix::prelude::*;
 use actix_redis::{Command, RedisActor};
@@ -37,7 +38,7 @@ pub async fn from_ids(
     if !res.iter().all(|res| match res {
         Ok(RespValue::BulkString(x)) => {
             let user:User = serde_json::from_slice(x).expect("I should be able to deserialize");
-            user_nicknames.push((user.id, user.nickname));
+            user_nicknames.push((user.id(), user.nickname));
             true
         }
         _ => false,
@@ -87,17 +88,16 @@ pub async fn force_add(
     let access_token = generate_access_token(&user);
     let access_token_domain = format!("access_token:{}", &access_token);
 
-    let set = redis.send(Command(resp_array!["SET", &user.domain(), &user.json()]));
-    let append = redis.send(Command(resp_array!["SADD", "users", &user.id]));
-    let set_at = redis.send(Command(resp_array!["SET", &access_token_domain, &user.id]));
-    let set_tc = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id]));
+    let set_user = redis_add(user.to_owned(), &redis); 
 
-    let group = join_all(vec![set, append, set_tc, set_at]).await;
+    let set_at = redis.send(Command(resp_array!["SET", &access_token_domain, &user.id()]));
+    let set_tc = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id()]));
 
-    match group.iter().nth(0) {
-        Some(Ok(Ok(RespValue::SimpleString(x)))) if x == "OK" =>
-            Ok(HttpResponse::Ok().json((&user, access_token))),
-        _ => Ok(HttpResponse::InternalServerError().finish()),
+    let (user_add, _) = join(set_user, join(set_tc, set_at)).await;
+
+    match user_add {
+        true => Ok(HttpResponse::Ok().json((&user, access_token))),
+        false => Ok(HttpResponse::InternalServerError().finish()),
     }
 }
 
@@ -130,18 +130,18 @@ pub async fn sign_up(
      
     let email = compose_temp_code_mail(&user, &email, &temp_code);
     let send = async_send_mail(email);
-    let temp = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id]));
+    let temp = redis.send(Command(resp_array!["SET", &temp_code_domain, &user.id()]));
     let expire = redis.send(Command(resp_array!["EXPIRE", &temp_code_domain, "1800"]));
-    let set = redis.send(Command(resp_array!["SET", &user.domain(), &user.json()]));
-    let append = redis.send(Command(resp_array!["SADD", "users", &user.id]));
 
-    let redis = join_all(vec![set, append, temp, expire]);
+    let user_add = redis_add(user, &redis);
 
-    let (res, _) = join(redis, send).await;
+    let redis = join(user_add, join(temp, expire));
 
-    match res.iter().nth(0) {
-        Some(Ok(Ok(RespValue::SimpleString(x)))) if x == "OK" => Ok(HttpResponse::Ok().body("email was sent with temp code")),
-        _ => Ok(HttpResponse::InternalServerError().finish()),
+    let ((add, _tokens), _sendmail) = join(redis, send).await;
+
+    match add {
+        true => Ok(HttpResponse::Ok().body("email was sent with temp code")),
+        false => Ok(HttpResponse::InternalServerError().finish()),
     }
 }
 
@@ -171,10 +171,10 @@ pub async fn verify_temp_code(
         _ => return Ok(HttpResponse::InternalServerError().finish()),
     };
 
-    if user.id == uid {
+    if user.id() == uid {
         let access_token = generate_access_token(&user);
         let token_domain = format!("access_token:{}",&access_token);
-        let set_token = redis.send(Command(resp_array!["SET", &token_domain, &user.id]));
+        let set_token = redis.send(Command(resp_array!["SET", &token_domain, &user.id()]));
         user.is_verified = true;
 
         let set = redis.send(Command(resp_array!["SET", &domain, user.json()]));
@@ -211,17 +211,13 @@ pub async fn delete(
     user_id: web::Path<String>,
     req: web::HttpRequest, 
 ) -> Result<HttpResponse, AWError> {
+    
     let user_id = user_id.into_inner();
     let headers = req.headers();
-    let domain = format!("user:{}", user_id);
 
-    let del = redis.send(Command(resp_array!["DEL", &domain]));
-    let pop = redis.send(Command(resp_array!["SREM", "users", &user_id]));
-    let auth = check_auth(&redis, &user_id, &headers);
+    let auth = check_auth(&redis, &user_id, &headers).await;
 
-    let ((res, _), is_auth) = join(join(del, pop), auth).await;
-
-    if let Ok(verified) = is_auth {
+    if let Ok(verified) = auth {
         if !verified {
             return Ok(HttpResponse::Unauthorized().finish());
         }
@@ -229,8 +225,19 @@ pub async fn delete(
         return Ok(HttpResponse::Unauthorized().finish());
     }
 
-    match res? {
-        Ok(RespValue::Integer(x)) if x == 1 => Ok(HttpResponse::Ok().body("deleted user")),
-        _ => Ok(HttpResponse::InternalServerError().finish()),
+    let user_json = redis_get_slice(&user_id, "user", &redis).await;
+
+    if user_json.is_none() {
+        return Ok(HttpResponse::NoContent().finish())
+    }
+
+    let user: User = serde_json::from_slice(&user_json.unwrap())
+        .expect("User should be able to Serialize");
+
+    let del = redis_delete(user, &redis).await;
+
+    match del {
+        true => Ok(HttpResponse::Ok().body("deleted user")),
+        false => Ok(HttpResponse::InternalServerError().finish()),
     }
 }

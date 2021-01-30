@@ -1,14 +1,17 @@
 pub mod topic;
 pub mod user;
 
-use std::collections::HashSet;
+use crate::{
+    model::{Topic, User},
+    redis_helper::redis_add,
+};
 use actix::Addr;
 use actix_redis::{Command, RedisActor};
-use actix_web::{web, HttpResponse, Error as AWError, Responder};
-use redis_async::{resp::RespValue, resp_array};
-use futures::future::join_all;
-use crate::model::{Topic, User};
+use actix_web::{web, Error as AWError, HttpResponse, Responder};
+use futures::future::{join, join_all};
 use liq::Setting;
+use redis_async::{resp::RespValue, resp_array};
+use std::collections::HashSet;
 
 pub async fn nuclear(redis: web::Data<Addr<RedisActor>>) -> Result<impl Responder, AWError> {
     let res = redis.send(Command(resp_array!["FLUSHALL",])).await?;
@@ -19,105 +22,93 @@ pub async fn nuclear(redis: web::Data<Addr<RedisActor>>) -> Result<impl Responde
     }
 }
 
-
 pub async fn get_setting(
     redis: web::Data<Addr<RedisActor>>,
-    setting_id: web::Path<String>
-    ) -> Result<HttpResponse, AWError> {
-
+    setting_id: web::Path<String>,
+) -> Result<HttpResponse, AWError> {
     let setting_id = setting_id.into_inner();
     let domain = format!("setting:{}", setting_id);
 
-    let res = redis.send(Command(resp_array![
-            "get",
-            &domain
-    ])).await?;
+    let res = redis.send(Command(resp_array!["get", &domain])).await?;
 
     match res {
-        Ok(RespValue::BulkString(x)) => 
-            Ok(HttpResponse::Ok().body(x)),
-        _ => Ok(HttpResponse::NoContent().finish())
+        Ok(RespValue::BulkString(x)) => Ok(HttpResponse::Ok().body(x)),
+        _ => Ok(HttpResponse::NoContent().finish()),
     }
-
 }
 
-pub async fn calculate_setting(
-    setting: web::Json<Setting>
-    ) -> Result<HttpResponse, AWError> {
-
+pub async fn calculate_setting(setting: web::Json<Setting>) -> Result<HttpResponse, AWError> {
     let setting = setting.into_inner();
     let result = setting.calculate();
 
     Ok(HttpResponse::Ok().json(result))
 }
 
-pub async fn dump(
-    redis: web::Data<Addr<RedisActor>>
-    ) -> Result<HttpResponse, AWError> {
-
+pub async fn dump(redis: web::Data<Addr<RedisActor>>) -> Result<HttpResponse, AWError> {
     // get all tables
-    
-    let res = redis.send(Command(resp_array![
-        "SMEMBERS",
-        "topics"
-    ])).await?;
+
+    let res = redis
+        .send(Command(resp_array!["SMEMBERS", "topics"]))
+        .await?;
 
     let topic_ids: Vec<String> = match res {
         Ok(RespValue::Array(ids)) => {
             let mut temp: Vec<String> = Vec::new();
             for id in ids {
                 if let RespValue::BulkString(v) = id {
-                    let (topic_id, _): (String, String)  = serde_json::from_slice(&v).expect("list item should be Deserializeable");
+                    let (topic_id, _): (String, String) =
+                        serde_json::from_slice(&v).expect("list item should be Deserializeable");
                     temp.push(topic_id);
-                } 
+                }
             }
             temp
-        },
-        _ => Vec::new()
+        }
+        _ => Vec::new(),
     };
     // get each topics
-    let res: Vec<Result<RespValue, AWError>> = join_all(topic_ids.iter().map(|id|{
-        let domain = format!("topic:{}",&id);
-        redis.send(Command(resp_array![
-                "get",
-                &domain,
-        ]))
-    })).await.into_iter()
-    .map(|item|{
-            item.map_err(AWError::from)
-                .and_then(|res| res.map_err(AWError::from))
-        }).collect();
+    let res: Vec<Result<RespValue, AWError>> = join_all(topic_ids.iter().map(|id| {
+        let domain = format!("topic:{}", &id);
+        redis.send(Command(resp_array!["get", &domain,]))
+    }))
+    .await
+    .into_iter()
+    .map(|item| {
+        item.map_err(AWError::from)
+            .and_then(|res| res.map_err(AWError::from))
+    })
+    .collect();
 
-    let mut topics:Vec<Topic> = Vec::new();
-    let mut user_ids:HashSet<String> = HashSet::new();
-    
+    let mut topics: Vec<Topic> = Vec::new();
+    let mut user_ids: HashSet<String> = HashSet::new();
+
     for r in res {
         if let Ok(RespValue::BulkString(x)) = r {
-            let t:Topic = serde_json::from_slice(&x).expect("should be deserializable");
+            let t: Topic = serde_json::from_slice(&x).expect("should be deserializable");
             // get all unique user ids
             user_ids = user_ids.union(&t.get_users()).map(String::from).collect();
             topics.push(t);
         }
     }
-    
+
     // get each user from user id
     let mut users: Vec<User> = Vec::new();
-    let res: Vec<Result<RespValue, AWError>> = join_all(user_ids.iter().map(|id|{
+    let res: Vec<Result<RespValue, AWError>> = join_all(user_ids.iter().map(|id| {
         let domain = format!("user:{}", &id);
-        redis.send(Command(resp_array![
-            "get",
-            &domain,
-        ]))
-    })).await.into_iter()
-    .map(|item|{
-            item.map_err(AWError::from)
-                .and_then(|res| res.map_err(AWError::from))
-        }).collect();
+        redis.send(Command(resp_array!["get", &domain,]))
+    }))
+    .await
+    .into_iter()
+    .map(|item| {
+        item.map_err(AWError::from)
+            .and_then(|res| res.map_err(AWError::from))
+    })
+    .collect();
 
     for r in res {
         if let Ok(RespValue::BulkString(x)) = r {
-            let user: User = serde_json::from_slice(&x).expect("user json data should be DeSeriliazable");
-            users.push(user); 
+            let user: User =
+                serde_json::from_slice(&x).expect("user json data should be DeSeriliazable");
+            users.push(user);
         }
     }
 
@@ -126,3 +117,16 @@ pub async fn dump(
 
 type DumpFile = (Vec<User>, Vec<Topic>);
 
+pub async fn restore(
+    redis: web::Data<Addr<RedisActor>>,
+    dump: web::Json<DumpFile>,
+) -> Result<HttpResponse, AWError> {
+    let (users, topics) = dump.into_inner();
+
+    let user_add = join_all(users.into_iter().map(|u| redis_add(u, &redis)));
+    let topic_add = join_all(topics.into_iter().map(|t| redis_add(t, &redis)));
+
+    let (_users, _topics) = join(user_add, topic_add).await;
+
+    Ok(HttpResponse::Ok().body("success"))
+}

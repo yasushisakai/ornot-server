@@ -3,15 +3,31 @@ use liq::{Plan, PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
-// use actix_web::{web, Error as AWError};
-// use actix::Addr;
-// use actix_redis::{Command, RedisActor};
-// use redis_async::{resp_array, resp::RespValue};
+
+pub trait Settable: Serialize {
+    fn domain_prefix(&self) -> String;
+    fn id(&self) -> String;
+    fn list_item(&self) -> String;
+
+    fn domain(&self) -> String {
+        return format!("{}:{}", &self.domain_prefix(), &self.id());
+    }
+
+    fn json(&self) -> String {
+        serde_json::to_string(&self).expect("I should be Serialize-able")
+    }
+}
 
 impl Settable for Setting {
-    fn domain(&self) -> String {
-        let based_hash = self.based_hash();
-        format!("setting:{}", based_hash)
+    fn domain_prefix(&self) -> String {
+        return String::from("setting");
+    }
+    fn id(&self) -> String {
+        self.based_hash()
+    }
+
+    fn list_item(&self) -> String {
+        self.id()
     }
 }
 
@@ -27,20 +43,20 @@ pub struct Topic {
 }
 
 impl Settable for Topic {
-    fn domain(&self) -> String {
+    fn domain_prefix(&self) -> String {
         format!("topic:{}", self.id)
+    }
+
+    fn id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn list_item(&self) -> String {
+        serde_json::to_string(&vec![&self.id, &self.title]).expect("should be Serializable")
     }
 }
 
 impl Topic {
-    pub fn list_item(&self) -> (String, String) {
-        (self.id.to_owned(), self.title.to_owned())
-    }
-
-    pub fn json(&self) -> String {
-        serde_json::to_string(self).expect("should be able to Serialize")
-    }
-
     pub fn add_plan(&mut self, text: String) {
         self.setting.add_plan(Plan::new(text));
     }
@@ -48,7 +64,7 @@ impl Topic {
     pub fn remove_plan(&mut self, text: String) {
         self.setting.delete_plan(&text);
     }
-    
+
     pub fn get_users(&self) -> HashSet<String> {
         self.setting.get_voters()
     }
@@ -62,7 +78,8 @@ impl Topic {
     }
 
     pub fn setting_json(&self) -> Vec<u8> {
-        serde_json::to_vec(&self.setting).expect("Topic's Setting should be able to be Serialized")
+        serde_json::to_vec(&self.setting)
+            .expect("Topic's Setting should be able to be Serialized")
     }
 
     pub fn insert_vote(&mut self, user_id: &str, vote: BTreeMap<String, f64>) -> String {
@@ -79,15 +96,6 @@ impl Topic {
     pub fn calculate(&mut self) {
         let result = self.setting.calculate();
         self.result = Some(result);
-    }
-
-    pub fn result_domain(&self) -> String {
-        let result: &PollResult = self
-            .result
-            .as_ref()
-            .expect("we should have a valid result id");
-
-        format!("result:{}", result.based_hash())
     }
 }
 
@@ -114,10 +122,6 @@ impl From<PartialTopic> for Topic {
     }
 }
 
-pub trait Settable {
-    fn domain(&self) -> String;
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct PartialUser {
     pub nickname: String,
@@ -130,9 +134,24 @@ impl From<PartialUser> for User {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+impl Settable for User {
+    fn domain_prefix(&self) -> String {
+        String::from("user")
+    }
+
+    fn id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn list_item(&self) -> String {
+        serde_json::to_string(&vec![&self.id, &self.nickname])
+            .expect("User-Settable should be Serializable")
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 pub struct User {
-    pub id: String,
+    id: String,
     pub nickname: String,
     pub is_verified: bool,
 }
@@ -145,20 +164,11 @@ impl User {
         Self {
             id,
             nickname,
-            // email,
-            // temp_code: None,
-            // access_token: None,
             is_verified: false,
         }
     }
 
     pub fn json(&self) -> String {
         serde_json::to_string(self).expect("user should be able to serialize")
-    }
-}
-
-impl Settable for User {
-    fn domain(&self) -> String {
-        format!("user:{}", self.id)
     }
 }

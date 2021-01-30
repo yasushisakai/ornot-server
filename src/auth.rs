@@ -1,4 +1,4 @@
-use crate::model::{PartialUser, User};
+use crate::model::{PartialUser, User, Settable};
 use crate::send_mail::Email;
 use actix::Addr;
 use actix_redis::{Command, RedisActor, RespValue};
@@ -20,7 +20,7 @@ pub fn generate_temp_code(p_user: &PartialUser) -> String {
 pub fn generate_access_token(user: &User) -> String {
     dotenv().ok();
     let salt = std::env::var("SALT_ACCESS_TOKEN").expect("evn var 'SALT_ACCESS_TOKEN missing'");
-    let salted = format!("{}{}", salt, user.id);
+    let salted = format!("{}{}", salt, user.id());
     encode(format!("{:x}", Sha256::digest(salted.as_bytes()))).into_string()
 }
 
@@ -31,7 +31,7 @@ use the below url to verify that you own this email address. \n
 https://ornot.vote/auth/?i={}&c={}\n
 bye and have a nice day :)
 ",
-        user.nickname, user.id, code,
+        user.nickname, user.id(), code,
     );
 
     Email {
@@ -88,6 +88,6 @@ pub async fn check_auth(
         _=> return Ok(false)
     };
     
-    Ok(user.id == uid)
+    Ok(user.id() == uid)
 }
 

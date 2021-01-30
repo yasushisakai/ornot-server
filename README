@@ -1,6 +1,9 @@
 very alpha version.
 
-* upon start-up this program looks for two environmental varialbles, "REDIS_ADDR" and "REDIS_PORT".
+* upon start-up this program looks for some environmental varialbles. Refer to dotenv file
+for the list. With the right information filled in and renamed to '.env', the file will be used
+to associate this configuration to the program.
+
 * you may need to edit the Cargo.toml file to point to the liq repository that is hosted in github
 
 api samples are written in request-test.txt, this program is planned to be hosted in https://ornot.vote/

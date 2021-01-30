@@ -3,14 +3,20 @@ use liq::{Plan, PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
+use std::fmt::Debug;
 
-pub trait Settable: Serialize {
-    fn domain_prefix(&self) -> String;
+pub trait Settable: Serialize + Debug {
+    fn domain_prefix() -> String;
+
+    fn prefix(&self) -> String {
+        Self::domain_prefix()
+    } //FIXME: theres got be a smarter way...
+
     fn id(&self) -> String;
     fn list_item(&self) -> String;
 
     fn domain(&self) -> String {
-        return format!("{}:{}", &self.domain_prefix(), &self.id());
+        return format!("{}:{}", Self::domain_prefix(), &self.id());
     }
 
     fn json(&self) -> String {
@@ -19,8 +25,8 @@ pub trait Settable: Serialize {
 }
 
 impl Settable for Setting {
-    fn domain_prefix(&self) -> String {
-        return String::from("setting");
+    fn domain_prefix() -> String {
+        String::from("setting")
     }
     fn id(&self) -> String {
         self.based_hash()
@@ -43,8 +49,8 @@ pub struct Topic {
 }
 
 impl Settable for Topic {
-    fn domain_prefix(&self) -> String {
-        format!("topic:{}", self.id)
+    fn domain_prefix() -> String {
+        String::from("topic")
     }
 
     fn id(&self) -> String {
@@ -99,7 +105,7 @@ impl Topic {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PartialTopic {
     title: String,
     description: String,
@@ -122,7 +128,7 @@ impl From<PartialTopic> for Topic {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PartialUser {
     pub nickname: String,
     pub email: String,
@@ -135,7 +141,7 @@ impl From<PartialUser> for User {
 }
 
 impl Settable for User {
-    fn domain_prefix(&self) -> String {
+    fn domain_prefix() -> String {
         String::from("user")
     }
 
@@ -149,7 +155,7 @@ impl Settable for User {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct User {
     id: String,
     pub nickname: String,

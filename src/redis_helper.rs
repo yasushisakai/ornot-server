@@ -6,9 +6,15 @@ use futures::future::join;
 use redis_async::{resp::RespValue as Value, resp_array};
 
 pub async fn redis_add(obj: impl Settable, redis: &web::Data<Addr<RedisActor>>) -> bool {
+
+    dbg!(obj.domain());
+    dbg!(obj.json());
+
     let add = redis.send(Command(resp_array!["SET", obj.domain(), obj.json()]));
 
-    let plural_domain = format!("{}s", obj.domain());
+    let plural_domain = format!("{}s", obj.prefix());
+
+    dbg!(obj.list_item());
 
     let list = redis.send(Command(resp_array![
         "SADD",
@@ -17,6 +23,8 @@ pub async fn redis_add(obj: impl Settable, redis: &web::Data<Addr<RedisActor>>) 
     ]));
 
     let (add, _list) = join(add, list).await;
+
+    dbg!(&add);
 
     if let Ok(Ok(Value::SimpleString(x))) = add {
         return x == "OK";

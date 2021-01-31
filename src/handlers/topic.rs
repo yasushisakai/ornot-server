@@ -1,5 +1,5 @@
 use crate::{
-    model::{PartialTopic, Settable, Topic},
+    model::{PartialTopic, Settable, Topic, SimplePlan},
     redis_helper::{redis_add, redis_delete, redis_get_slice},
 };
 use actix::prelude::*;
@@ -93,7 +93,7 @@ pub async fn add_plan(
     };
 
     // add the plan
-    topic.add_plan(text);
+    topic.add_plan(SimplePlan(text));
 
     // save the new topic data
     let res = redis
@@ -168,7 +168,7 @@ pub async fn remove_plan(
         None => return Ok(HttpResponse::NoContent().finish()),
     };
 
-    topic.remove_plan(text);
+    topic.remove_plan(SimplePlan(text));
 
     // save the new topic data
     let res = redis

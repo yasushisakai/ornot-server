@@ -1,5 +1,6 @@
 mod user;
 mod topic;
+mod plan;
 
 use liq::Setting;
 use serde::Serialize;
@@ -7,6 +8,7 @@ use std::fmt::Debug;
 
 pub use user::{User, PartialUser};
 pub use topic::{Topic, PartialTopic};
+pub use plan::SimplePlan;
 
 pub trait Settable: Serialize + Debug {
     fn domain_prefix() -> String;

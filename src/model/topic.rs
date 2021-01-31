@@ -1,10 +1,10 @@
 use bs58::encode;
-use liq::{Plan, PollResult, Setting};
+use liq::{PollResult, Setting};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use crate::model::Settable;
+use crate::model::{Settable, SimplePlan};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -32,11 +32,13 @@ impl Settable for Topic {
 }
 
 impl Topic {
-    pub fn add_plan(&mut self, text: String) {
-        self.setting.add_plan(Plan::new(text));
+    pub fn add_plan(&mut self, plan: SimplePlan) {
+        let text = plan.id();
+        self.setting.add_plan(text);
     }
 
-    pub fn remove_plan(&mut self, text: String) {
+    pub fn remove_plan(&mut self, plan: SimplePlan) {
+        let text = plan.id();
         self.setting.delete_plan(&text);
     }
 

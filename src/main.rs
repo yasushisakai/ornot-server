@@ -1,8 +1,8 @@
 mod auth;
 mod handlers;
 mod model;
-mod send_mail;
 mod redis_helper;
+mod send_mail;
 
 use actix_cors::Cors;
 use actix_redis::RedisActor;
@@ -41,20 +41,21 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/api/v1/users").route(web::post().to(user::from_ids)), // .route(web::get().to(list_users))
             )
-            .service(web::resource("/api/v1/user/signup")
-                .route(web::post().to(user::sign_up)))
-            .service(web::resource("/api/v1/user/force_add")
-                .route(web::post().to(user::force_add)))
-            .service(web::resource("/api/v1/user/{user_id}/code/{temp_code}")
-                .route(web::get().to(user::verify_temp_code)))
-            .service(web::resource("/api/v1/user/{user_id}/check")
-                .route(web::get().to(user::verify_auth_code)))
+            .service(web::resource("/api/v1/user/signup").route(web::post().to(user::sign_up)))
+            .service(web::resource("/api/v1/user/force_add").route(web::post().to(user::force_add)))
+            .service(
+                web::resource("/api/v1/user/{user_id}/code/{temp_code}")
+                    .route(web::get().to(user::verify_temp_code)),
+            )
+            .service(
+                web::resource("/api/v1/user/{user_id}/check")
+                    .route(web::get().to(user::verify_auth_code)),
+            )
             .service(
                 web::resource("/api/v1/user/{user_id}")
                     .route(web::get().to(user::get))
                     .route(web::delete().to(user::delete)),
             )
-
             // topic
             .service(web::resource("/api/v1/topics").route(web::get().to(topic::list)))
             .service(web::resource("/api/v1/topic").route(web::put().to(topic::put)))
@@ -64,11 +65,7 @@ async fn main() -> std::io::Result<()> {
                     .route(web::delete().to(topic::delete)),
             )
             .service(
-                web::resource("/api/v1/topic/{topic_id}/new_plan")
-                    .route(web::post().to(topic::add_plan))
-            )
-            .service(
-                web::resource("api/v1/topic/{topic_id}/plan/{text}")
+                web::resource("api/v1/topic/{topic_id}/plan/{plan_id}")
                     .route(web::delete().to(topic::remove_plan_id))
                     .route(web::post().to(topic::add_plan_id)),
             )
@@ -81,21 +78,16 @@ async fn main() -> std::io::Result<()> {
                     .route(web::post().to(topic::add_user))
                     .route(web::delete().to(topic::remove_user)),
             )
-
+            .service(
+                web::resource("/api/v1/topic/{topic_id}/new_plan")
+                    .route(web::post().to(topic::add_plan)),
+            )
             // plan
-            .service(web::resource("api/v1/plan/{plan_id}")
-                .route(web::get().to(plan::get))
-            )
-            .service(web::resource("api/v1/plan")
-                .route(web::put().to(plan::put))
-            )
-
+            .service(web::resource("api/v1/plan/{plan_id}").route(web::get().to(plan::get)))
+            .service(web::resource("api/v1/plan").route(web::put().to(plan::put)))
             // setting and calculate
-            .service(web::resource("api/v1/setting/{setting_id}")
-                .route(web::get().to(get_setting)))
-            .service(web::resource("api/v1/calculate_raw")
-                .route(web::post().to(calculate_setting)))
-
+            .service(web::resource("api/v1/setting/{setting_id}").route(web::get().to(get_setting)))
+            .service(web::resource("api/v1/calculate_raw").route(web::post().to(calculate_setting)))
             // helper
             .service(web::resource("api/v1/nuclear").route(web::delete().to(nuclear)))
             .service(web::resource("api/v1/dump").route(web::get().to(dump)))
@@ -105,4 +97,3 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-

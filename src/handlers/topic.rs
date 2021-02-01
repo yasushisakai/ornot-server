@@ -75,7 +75,7 @@ pub async fn put(
     let id: String = topic.id().to_string();
 
     match redis_add(topic, &redis).await {
-        true => Ok(HttpResponse::Ok().body(id)),
+        true => Ok(HttpResponse::Ok().json(id)),
         false => Ok(HttpResponse::InternalServerError().body("could not put topic")),
     }
 }
@@ -91,6 +91,8 @@ pub async fn add_plan(
     let topic_id = topic_id.into_inner();
 
     let topic_slice = redis_get_slice(&topic_id, "topic", &redis).await;
+
+    dbg!(&topic_id);
 
     let mut topic: Topic = match topic_slice {
         Some(x) => serde_json::from_slice(&x).expect("slice should be Deserilazable"),

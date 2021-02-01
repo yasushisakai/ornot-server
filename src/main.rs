@@ -64,6 +64,10 @@ async fn main() -> std::io::Result<()> {
                     .route(web::delete().to(topic::delete)),
             )
             .service(
+                web::resource("/api/v1/topic/{topic_id}/new_plan")
+                    .route(web::post().to(topic::add_plan))
+            )
+            .service(
                 web::resource("api/v1/topic/{topic_id}/plan/{text}")
                     .route(web::delete().to(topic::remove_plan_id))
                     .route(web::post().to(topic::add_plan_id)),
@@ -81,14 +85,11 @@ async fn main() -> std::io::Result<()> {
             // plan
             .service(web::resource("api/v1/plan/{plan_id}")
                 .route(web::get().to(plan::get))
-                // .route(web::delete)
-
             )
             .service(web::resource("api/v1/plan")
                 .route(web::put().to(plan::put))
-                // .route(web::delete)
-
             )
+
             // setting and calculate
             .service(web::resource("api/v1/setting/{setting_id}")
                 .route(web::get().to(get_setting)))

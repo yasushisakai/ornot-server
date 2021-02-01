@@ -1,5 +1,5 @@
 use crate::{
-    model::{PartialTopic, Settable, Topic},
+    model::{PartialTopic, Settable, Topic, RawPlan, Plan},
     redis_helper::{redis_add, redis_delete, redis_get_slice},
 };
 use actix::prelude::*;
@@ -72,12 +72,47 @@ pub async fn put(
     topic: web::Json<PartialTopic>,
 ) -> Result<HttpResponse, AWError> {
     let topic: Topic = topic.into_inner().into();
+    let id: String = topic.id().to_string();
 
     match redis_add(topic, &redis).await {
-        true => Ok(HttpResponse::Ok().body("added topic")),
+        true => Ok(HttpResponse::Ok().body(id)),
         false => Ok(HttpResponse::InternalServerError().body("could not put topic")),
     }
 }
+
+// this adds the plan to the db and appends to the 
+// votes list.
+pub async fn add_plan(
+    redis: web::Data<Addr<RedisActor>>,
+    topic_id: web::Path<String>,
+    raw_plan: web::Json<RawPlan>
+    ) -> Result<HttpResponse, AWError>{
+
+    let topic_id = topic_id.into_inner();
+
+    let topic_slice = redis_get_slice(&topic_id, "topic", &redis).await;
+
+    let mut topic: Topic = match topic_slice {
+        Some(x) => serde_json::from_slice(&x).expect("slice should be Deserilazable"),
+        None => return Ok(HttpResponse::NoContent().body("could not retrieve topic")),
+    };
+
+    let plan: Plan = raw_plan.into_inner().into();
+    let plan_id = plan.id();
+
+    topic.add_plan_id(&plan_id);
+
+    let add  = join(
+        redis_add(topic, &redis), 
+        redis_add(plan, &redis)
+        ).await;
+
+    match add {
+        (true, true) => Ok(HttpResponse::Ok().json((topic_id, plan_id))),
+        _ => Ok(HttpResponse::InternalServerError().body("could not add new topic and plan to the db"))
+    }
+}
+
 
 pub async fn add_plan_id(
     redis: web::Data<Addr<RedisActor>>,

@@ -8,11 +8,11 @@ use actix_web::{web, Error as AWError, HttpResponse};
 
 pub async fn get(
     redis: web::Data<Addr<RedisActor>>,
-    topic_id: web::Path<String>,
+    plan_id: web::Path<String>,
 ) -> Result<HttpResponse, AWError> {
-    let topic_id = topic_id.into_inner();
+    let plan_id = plan_id.into_inner();
 
-    let slice = redis_get_slice(&topic_id, "plan", &redis).await;
+    let slice = redis_get_slice(&plan_id, "plan", &redis).await;
 
     match slice {
         Some(x) => {

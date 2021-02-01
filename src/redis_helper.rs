@@ -5,6 +5,7 @@ use actix_web::web;
 use futures::future::{join, join_all};
 use redis_async::{resp::RespValue as Value, resp_array};
 
+// TODO this is obscuring the error, not best practice
 pub async fn redis_add(obj: impl Settable, redis: &web::Data<Addr<RedisActor>>) -> bool {
     let add = redis.send(Command(resp_array!["SET", obj.domain(), obj.json()]));
 

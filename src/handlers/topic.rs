@@ -1,5 +1,5 @@
 use crate::{
-    model::{PartialTopic, Settable, Topic, SimplePlan},
+    model::{PartialTopic, Settable, Topic},
     redis_helper::{redis_add, redis_delete, redis_get_slice},
 };
 use actix::prelude::*;
@@ -79,11 +79,11 @@ pub async fn put(
     }
 }
 
-pub async fn add_plan(
+pub async fn add_plan_id(
     redis: web::Data<Addr<RedisActor>>,
     path: web::Path<(String, String)>,
 ) -> Result<HttpResponse, AWError> {
-    let (topic_id, text) = path.into_inner();
+    let (topic_id, plan_id) = path.into_inner();
 
     let data = redis_get_slice(&topic_id, "topic", &redis).await;
 
@@ -92,8 +92,8 @@ pub async fn add_plan(
         None => return Ok(HttpResponse::NoContent().body("could not retrieve topic")),
     };
 
-    // add the plan
-    topic.add_plan(SimplePlan(text));
+    // add the plan_id
+    topic.add_plan_id(&plan_id);
 
     // save the new topic data
     let res = redis
@@ -154,7 +154,7 @@ pub async fn update_vote_and_calculate(
     }
 }
 
-pub async fn remove_plan(
+pub async fn remove_plan_id(
     redis: web::Data<Addr<RedisActor>>,
     path: web::Path<(String, String)>,
 ) -> Result<HttpResponse, AWError> {
@@ -168,7 +168,7 @@ pub async fn remove_plan(
         None => return Ok(HttpResponse::NoContent().finish()),
     };
 
-    topic.remove_plan(SimplePlan(text));
+    topic.remove_plan_id(&text);
 
     // save the new topic data
     let res = redis

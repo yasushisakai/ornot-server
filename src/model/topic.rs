@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use crate::model::{Settable, SimplePlan};
+use crate::model::Settable;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -32,14 +32,12 @@ impl Settable for Topic {
 }
 
 impl Topic {
-    pub fn add_plan(&mut self, plan: SimplePlan) {
-        let text = plan.id();
-        self.setting.add_plan(text);
+    pub fn add_plan_id(&mut self, plan_id: &str) {
+        self.setting.add_plan(plan_id);
     }
 
-    pub fn remove_plan(&mut self, plan: SimplePlan) {
-        let text = plan.id();
-        self.setting.delete_plan(&text);
+    pub fn remove_plan_id(&mut self, plan_id: &str) {
+        self.setting.delete_plan(plan_id);
     }
 
     pub fn add_user(&mut self, user_id: String) {

@@ -54,6 +54,7 @@ async fn main() -> std::io::Result<()> {
                     .route(web::get().to(user::get))
                     .route(web::delete().to(user::delete)),
             )
+
             // topic
             .service(web::resource("/api/v1/topics").route(web::get().to(topic::list)))
             .service(web::resource("/api/v1/topic").route(web::put().to(topic::put)))
@@ -64,8 +65,8 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::resource("api/v1/topic/{topic_id}/plan/{text}")
-                    .route(web::delete().to(topic::remove_plan))
-                    .route(web::post().to(topic::add_plan)),
+                    .route(web::delete().to(topic::remove_plan_id))
+                    .route(web::post().to(topic::add_plan_id)),
             )
             .service(
                 web::resource("api/v1/topic/{topic_id}/vote/{user_id}")
@@ -75,6 +76,18 @@ async fn main() -> std::io::Result<()> {
                 web::resource("api/v1/topic/{topic_id}/user/{user_id}")
                     .route(web::post().to(topic::add_user))
                     .route(web::delete().to(topic::remove_user)),
+            )
+
+            // plan
+            .service(web::resource("api/v1/plan/{plan_id}")
+                .route(web::get().to(plan::get))
+                // .route(web::delete)
+
+            )
+            .service(web::resource("api/v1/plan")
+                .route(web::put().to(plan::put))
+                // .route(web::delete)
+
             )
             // setting and calculate
             .service(web::resource("api/v1/setting/{setting_id}")

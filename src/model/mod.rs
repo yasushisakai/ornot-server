@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 pub use user::{User, PartialUser};
 pub use topic::{Topic, PartialTopic};
-pub use plan::SimplePlan;
+pub use plan::{Plan, RawPlan};
 
 pub trait Settable: Serialize + Debug {
     fn domain_prefix() -> String;
